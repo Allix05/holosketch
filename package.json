@@ -1,0 +1,11 @@
+{
+  "name": "holosketch",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pinch-draw a shape in the air with your webcam and it becomes a real 3D hologram you can pick up, move, and spin with your hand.",
+  "scripts": {
+    "test": "node --test",
+    "serve": "python -m http.server 8092 --directory docs"
+  }
+}

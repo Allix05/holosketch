@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Holosketch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700&family=Rajdhani:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <h1>Draw It. <span class="accent">Hold It.</span></h1>
+      <p class="subtitle">Pinch your thumb and index finger to sketch a shape in the air. Hit <strong>Extrude</strong> and it becomes a real 3D hologram floating over your camera feed &mdash; pinch it to pick it up, move your hand to carry it around, and turn your wrist to spin it. Runs <strong>entirely in your browser</strong>, no server, video never leaves your device.</p>
+    </header>
+
+    <main class="stage-wrap">
+      <div id="startOverlay" class="start-overlay">
+        <button id="startBtn" class="start-btn">Activate Camera</button>
+        <p class="start-hint">Needs camera access. Everything runs locally &mdash; nothing is uploaded.</p>
+      </div>
+
+      <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loadingText">Booting hand-tracking model&hellip;</div>
+      </div>
+
+      <div class="stage">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="drawCanvas"></canvas>
+        <canvas id="glCanvas"></canvas>
+        <canvas id="overlay"></canvas>
+      </div>
+
+      <div id="errorBanner" class="error-banner hidden"></div>
+
+      <div class="hud">
+        <div class="hud-left">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">Show your hand to begin sketching</span>
+        </div>
+        <div class="hud-right">
+          <label class="color-label">
+            Hologram color
+            <div class="color-swatches" id="colorSwatches"></div>
+          </label>
+          <button id="extrudeBtn" disabled>Extrude</button>
+          <button id="clearBtn">Clear</button>
+        </div>
+      </div>
+    </main>
+
+    <section class="tech-note">
+      <h2>How it works</h2>
+      <ul>
+        <li><strong>Draw</strong> &mdash; MediaPipe's Hand Landmarker tracks your hand at 21 points; pinching thumb + index draws a stroke on an invisible plane in front of the camera.</li>
+        <li><strong>Extrude</strong> &mdash; the stroke is simplified into a clean polygon (Ramer&ndash;Douglas&ndash;Peucker), closed if needed, and extruded into real 3D geometry with Three.js/WebGL &mdash; a genuine solid, not a flat sprite.</li>
+        <li><strong>Hold</strong> &mdash; pinching near the hologram grabs it; your hand's tracked (x, y, z) position and wrist rotation drive the object's position and spin in real time while held, then it floats gently in place once released.</li>
+      </ul>
+    </section>
+
+    <footer class="footer">
+      Built with MediaPipe Hand Landmarker + Three.js &middot; <a href="https://github.com/Allix05/holosketch" target="_blank" rel="noopener">source on GitHub</a>
+    </footer>
+  </div>
+
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  </script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
