@@ -9,6 +9,7 @@ const MIN_STROKE_POINTS = 8;
 const DEPTH_BASE = 3.0;
 const SCALE_MIN = 0.4;
 const SCALE_MAX = 2.4;
+const MATERIALIZE_MS = 500;
 
 const video = document.getElementById("video");
 const stage = document.querySelector(".stage");
@@ -122,10 +123,12 @@ function buildHologram(points2D, hex) {
   const color = new THREE.Color(hex);
   const fillMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, side: THREE.DoubleSide });
   const fillMesh = new THREE.Mesh(geometry, fillMat);
+  fillMesh.userData.baseOpacity = 0.22;
 
   const edgesGeo = new THREE.EdgesGeometry(geometry, 12);
   const edgeMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95 });
   const wireframe = new THREE.LineSegments(edgesGeo, edgeMat);
+  wireframe.userData.baseOpacity = 0.95;
 
   const group = new THREE.Group();
   group.add(fillMesh);
@@ -149,6 +152,9 @@ let lastDrawPx = null;
 const pinchDebouncer = new Debouncer(3, false);
 const pinkyDebouncer = new Debouncer(4, false);
 let pinkyWasUp = false;
+let materializeStart = null;
+let materializeOriginPx = null;
+let materializeColor = currentColor;
 
 function clearDrawCanvas() {
   drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
@@ -172,6 +178,47 @@ function extrude(landmarks) {
   mode = "holo";
   clearDrawCanvas();
   setStatus("Resting in your open hand", "holding");
+
+  const p = penPoint(landmarks);
+  materializeStart = performance.now();
+  materializeOriginPx = { x: p.x * overlay.width, y: p.y * overlay.height };
+  materializeColor = currentColor;
+}
+
+// A quick materialization pulse -- an expanding, fading ring plus a bright
+// core flash at the hand -- drawn while the hologram itself fades/scales
+// in from nothing (see the "holo" branch in loop()), so it feels like it
+// snaps into existence rather than just appearing. Returns the 0..1
+// progress (or null if no pulse is active) so the caller can drive the
+// matching fade-in on the hologram itself from the same timeline.
+function drawMaterializeFlash(nowMs) {
+  if (materializeStart === null) return null;
+  const t = Math.min(1, (nowMs - materializeStart) / MATERIALIZE_MS);
+  const ringEase = 1 - Math.pow(1 - t, 2);
+  const maxRadius = Math.max(overlay.width, overlay.height) * 0.22;
+
+  overlayCtx.save();
+  overlayCtx.globalCompositeOperation = "lighter";
+
+  overlayCtx.beginPath();
+  overlayCtx.arc(materializeOriginPx.x, materializeOriginPx.y, 6 + ringEase * maxRadius, 0, Math.PI * 2);
+  overlayCtx.strokeStyle = materializeColor;
+  overlayCtx.lineWidth = 2 + (1 - t) * 5;
+  overlayCtx.globalAlpha = (1 - t) * 0.9;
+  overlayCtx.shadowColor = materializeColor;
+  overlayCtx.shadowBlur = 20;
+  overlayCtx.stroke();
+
+  overlayCtx.beginPath();
+  overlayCtx.arc(materializeOriginPx.x, materializeOriginPx.y, 16 * (1 - t), 0, Math.PI * 2);
+  overlayCtx.fillStyle = "#ffffff";
+  overlayCtx.globalAlpha = (1 - t) * 0.85;
+  overlayCtx.fill();
+
+  overlayCtx.restore();
+
+  if (t >= 1) materializeStart = null;
+  return t;
 }
 
 async function init() {
@@ -215,6 +262,7 @@ function loop() {
   overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
 
   const nowMs = performance.now();
+  const materializeT = drawMaterializeFlash(nowMs);
   const result = handLandmarker.detectForVideo(video, nowMs);
   const landmarks = (result.landmarks || [])[0];
 
@@ -272,7 +320,15 @@ function loop() {
       holoGroup.position.set(world.x, world.y, world.z);
       holoGroup.rotation.y = wristTwistAngle(landmarks);
       const rawScale = handLength(landmarks) / referenceHandLength;
-      holoGroup.scale.setScalar(Math.min(SCALE_MAX, Math.max(SCALE_MIN, rawScale)));
+      let scale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, rawScale));
+      if (materializeT !== null) {
+        const eased = materializeT * materializeT * (3 - 2 * materializeT); // smoothstep
+        scale *= eased;
+        holoGroup.traverse((obj) => {
+          if (obj.material) obj.material.opacity = obj.userData.baseOpacity * eased;
+        });
+      }
+      holoGroup.scale.setScalar(scale);
       setStatus("Resting in your open hand", "holding");
     }
 
@@ -293,6 +349,7 @@ clearBtn.addEventListener("click", () => {
   lastDrawPx = null;
   pinkyWasUp = false;
   referenceHandLength = null;
+  materializeStart = null;
   if (holoGroup) {
     scene.remove(holoGroup);
     holoGroup = null;
