@@ -53,6 +53,27 @@ export function handRotation(landmarks) {
   return Math.atan2(mid.y - wrist.y, mid.x - wrist.x);
 }
 
+// Angle of the line between the index and pinky knuckles. When the hand
+// is held upright (fingers toward the ceiling) and you twist your wrist
+// -- rotating the forearm, not tilting the hand -- this line visibly
+// sweeps around, making it a much better "spin the hologram" control
+// than handRotation, which tracks hand tilt instead.
+export function wristTwistAngle(landmarks) {
+  const a = landmarks[LM.INDEX_MCP];
+  const b = landmarks[LM.PINKY_MCP];
+  return Math.atan2(b.y - a.y, b.x - a.x);
+}
+
+// Distance from the wrist to the middle-finger knuckle: a depth cue like
+// palmWidth (bigger == closer), but measured along the forearm's own
+// axis instead of across it. Twisting the wrist rotates around that
+// axis, so unlike palmWidth (which foreshortens as the knuckle line
+// turns edge-on), this stays roughly stable during a pure twist -- so
+// distance/scale doesn't get dragged around by rotation.
+export function handLength(landmarks) {
+  return dist2D(landmarks[LM.WRIST], landmarks[LM.MIDDLE_MCP]);
+}
+
 // How extended a finger is: ratio of (wrist -> tip) to (wrist -> its own
 // MCP) distance. Rotation-invariant (pure distances, no axis assumption),
 // so it works regardless of how the hand is oriented toward the camera.

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pinchRatio, isPinching, penPoint, palmWidth, palmCenter, handRotation, isPinkyUp, Debouncer, LM } from "../hand.js";
+import { pinchRatio, isPinching, penPoint, palmWidth, palmCenter, handRotation, isPinkyUp, wristTwistAngle, handLength, Debouncer, LM } from "../hand.js";
 
 function baseLandmarks() {
   return Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5, z: 0 }));
@@ -81,6 +81,29 @@ test("a straightened pinky (tip far past the MCP) is raised", () => {
   lm[LM.PINKY_MCP] = { x: 0, y: 0.3, z: 0 };
   lm[LM.PINKY_TIP] = { x: 0, y: 0.9, z: 0 };
   assert.equal(isPinkyUp(lm), true);
+});
+
+test("wristTwistAngle points from the index knuckle toward the pinky knuckle", () => {
+  const lm = baseLandmarks();
+  lm[LM.INDEX_MCP] = { x: 0, y: 0, z: 0 };
+  lm[LM.PINKY_MCP] = { x: 1, y: 0, z: 0 };
+  assert.ok(Math.abs(wristTwistAngle(lm) - 0) < 1e-9);
+
+  lm[LM.PINKY_MCP] = { x: 0, y: 1, z: 0 };
+  assert.ok(Math.abs(wristTwistAngle(lm) - Math.PI / 2) < 1e-9);
+});
+
+test("handLength measures the wrist-to-middle-knuckle distance, unaffected by knuckle-line width", () => {
+  const lm = baseLandmarks();
+  lm[LM.WRIST] = { x: 0, y: 0, z: 0 };
+  lm[LM.MIDDLE_MCP] = { x: 0, y: 0.4, z: 0 };
+  assert.ok(Math.abs(handLength(lm) - 0.4) < 1e-9);
+
+  // Twisting the wrist changes the knuckle-line width/angle but shouldn't
+  // move the middle knuckle itself, so handLength stays the same.
+  lm[LM.INDEX_MCP] = { x: -0.2, y: 0.35, z: 0 };
+  lm[LM.PINKY_MCP] = { x: 0.05, y: 0.42, z: 0 };
+  assert.ok(Math.abs(handLength(lm) - 0.4) < 1e-9);
 });
 
 test("palmCenter averages the wrist and the index/middle/pinky knuckles", () => {
