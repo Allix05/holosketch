@@ -318,7 +318,7 @@ function loop() {
       const palmC = palmCenter(landmarks);
       const world = screenToWorld(palmC.x, palmC.y, DEPTH_BASE);
       holoGroup.position.set(world.x, world.y, world.z);
-      holoGroup.rotation.y = wristTwistAngle(landmarks);
+      holoGroup.rotation.y = -wristTwistAngle(landmarks);
       const rawScale = handLength(landmarks) / referenceHandLength;
       let scale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, rawScale));
       if (materializeT !== null) {
