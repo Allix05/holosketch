@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pinchRatio, isPinching, penPoint, palmWidth, handRotation, Debouncer, LM } from "../hand.js";
+import { pinchRatio, isPinching, penPoint, palmWidth, palmCenter, handRotation, isPinkyUp, Debouncer, LM } from "../hand.js";
 
 function baseLandmarks() {
   return Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5, z: 0 }));
@@ -65,4 +65,31 @@ test("Debouncer resets the streak on interruption", () => {
   d.update(true);
   d.update(false);
   assert.equal(d.update(true), false);
+});
+
+test("a curled pinky (tip near the wrist) is not raised", () => {
+  const lm = baseLandmarks();
+  lm[LM.WRIST] = { x: 0, y: 0, z: 0 };
+  lm[LM.PINKY_MCP] = { x: 0, y: 0.3, z: 0 };
+  lm[LM.PINKY_TIP] = { x: 0.05, y: 0.32, z: 0 };
+  assert.equal(isPinkyUp(lm), false);
+});
+
+test("a straightened pinky (tip far past the MCP) is raised", () => {
+  const lm = baseLandmarks();
+  lm[LM.WRIST] = { x: 0, y: 0, z: 0 };
+  lm[LM.PINKY_MCP] = { x: 0, y: 0.3, z: 0 };
+  lm[LM.PINKY_TIP] = { x: 0, y: 0.9, z: 0 };
+  assert.equal(isPinkyUp(lm), true);
+});
+
+test("palmCenter averages the wrist and the index/middle/pinky knuckles", () => {
+  const lm = baseLandmarks();
+  lm[LM.WRIST] = { x: 0, y: 0, z: 0 };
+  lm[LM.INDEX_MCP] = { x: 1, y: 0, z: 0 };
+  lm[LM.MIDDLE_MCP] = { x: 1, y: 1, z: 0 };
+  lm[LM.PINKY_MCP] = { x: 0, y: 1, z: 0 };
+  const c = palmCenter(lm);
+  assert.ok(Math.abs(c.x - 0.5) < 1e-9);
+  assert.ok(Math.abs(c.y - 0.5) < 1e-9);
 });

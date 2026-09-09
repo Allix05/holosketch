@@ -1,15 +1,14 @@
 import * as THREE from "three";
 import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 
-import { isPinching, penPoint, palmWidth, handRotation, Debouncer } from "./hand.js";
+import { isPinching, isPinkyUp, penPoint, palmCenter, palmWidth, handRotation, Debouncer } from "./hand.js";
 import { preparePathForExtrusion } from "./path.js";
 
 const COLORS = ["#4df3ff", "#ff8a3d", "#4dffa0", "#ff4dc4", "#ffffff"];
 const MIN_STROKE_POINTS = 8;
 const DEPTH_BASE = 3.0;
-const DEPTH_MIN = 1.6;
-const DEPTH_MAX = 4.5;
-const DEPTH_SENSITIVITY = 6.0;
+const SCALE_MIN = 0.4;
+const SCALE_MAX = 2.4;
 
 const video = document.getElementById("video");
 const stage = document.querySelector(".stage");
@@ -26,7 +25,6 @@ const errorBanner = document.getElementById("errorBanner");
 const statusDot = document.getElementById("statusDot");
 const statusText = document.getElementById("statusText");
 const colorSwatchesEl = document.getElementById("colorSwatches");
-const extrudeBtn = document.getElementById("extrudeBtn");
 const clearBtn = document.getElementById("clearBtn");
 
 let currentColor = COLORS[0];
@@ -56,10 +54,7 @@ function setStatus(text, dotClass) {
 // ---- Three.js scene -------------------------------------------------
 
 let renderer, scene, camera3d, holoGroup = null;
-let holoBaseY = 0;
-let held = false;
 let referencePalmWidth = null;
-let currentDepth = DEPTH_BASE;
 
 function initThree() {
   renderer = new THREE.WebGLRenderer({ canvas: glCanvas, alpha: true, antialias: true });
@@ -138,8 +133,6 @@ function buildHologram(points2D, hex) {
 
   const world = screenToWorld(0.5, 0.5, DEPTH_BASE);
   group.position.set(world.x, world.y, world.z);
-  holoBaseY = world.y;
-  currentDepth = DEPTH_BASE;
 
   if (holoGroup) scene.remove(holoGroup);
   holoGroup = group;
@@ -154,6 +147,8 @@ let mode = "draw"; // "draw" | "holo"
 let strokePoints = [];
 let lastDrawPx = null;
 const pinchDebouncer = new Debouncer(3, false);
+const pinkyDebouncer = new Debouncer(4, false);
+let pinkyWasUp = false;
 
 function clearDrawCanvas() {
   drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
@@ -167,6 +162,16 @@ function drawCursor(px, py, pinching) {
   overlayCtx.lineWidth = 1.5;
   overlayCtx.strokeStyle = "rgba(255,255,255,0.6)";
   overlayCtx.stroke();
+}
+
+function extrude(landmarks) {
+  const shape2D = preparePathForExtrusion(strokePoints, { simplifyTolerance: 0.008, targetSize: 1.3 });
+  if (!shape2D) return;
+  referencePalmWidth = palmWidth(landmarks);
+  buildHologram(shape2D, currentColor);
+  mode = "holo";
+  clearDrawCanvas();
+  setStatus("Resting in your open hand", "holding");
 }
 
 async function init() {
@@ -241,74 +246,54 @@ function loop() {
         }
         drawCtx.shadowBlur = 0;
         lastDrawPx = { x: px, y: py };
-        extrudeBtn.disabled = strokePoints.length < MIN_STROKE_POINTS;
         setStatus("Sketching...", "drawing");
       } else {
         lastDrawPx = null;
         setStatus(
-          strokePoints.length >= MIN_STROKE_POINTS ? "Pinch Extrude, or keep sketching" : "Pinch thumb + index to sketch",
+          strokePoints.length >= MIN_STROKE_POINTS ? "Raise your pinky to make it 3D" : "Pinch thumb + index to sketch",
           "ready"
         );
       }
-    } else if (mode === "holo" && holoGroup) {
-      if (pinching) {
-        if (!held) {
-          referencePalmWidth = palmWidth(landmarks);
-          held = true;
-        }
-        const pw = palmWidth(landmarks);
-        const delta = (referencePalmWidth - pw) * DEPTH_SENSITIVITY;
-        currentDepth = Math.min(DEPTH_MAX, Math.max(DEPTH_MIN, DEPTH_BASE + delta));
-        const world = screenToWorld(p.x, p.y, currentDepth);
-        holoGroup.position.set(world.x, world.y, world.z);
-        holoBaseY = world.y;
-        holoGroup.rotation.z = -handRotation(landmarks) - Math.PI / 2;
-        setStatus("Holding hologram", "holding");
-      } else {
-        held = false;
-        setStatus("Hologram floating — pinch to pick it up", "ready");
+
+      const pinkyUp = pinkyDebouncer.update(isPinkyUp(landmarks));
+      if (pinkyUp && !pinkyWasUp && strokePoints.length >= MIN_STROKE_POINTS) {
+        extrude(landmarks);
       }
+      pinkyWasUp = pinkyUp;
+    } else if (mode === "holo" && holoGroup) {
+      // The hologram continuously rests in your open hand: position, spin,
+      // and apparent size all track the hand live, every frame -- no
+      // separate "grab" gesture and no scripted idle animation.
+      const palmC = palmCenter(landmarks);
+      const world = screenToWorld(palmC.x, palmC.y, DEPTH_BASE);
+      holoGroup.position.set(world.x, world.y, world.z);
+      holoGroup.rotation.z = -handRotation(landmarks) - Math.PI / 2;
+      const rawScale = palmWidth(landmarks) / referencePalmWidth;
+      holoGroup.scale.setScalar(Math.min(SCALE_MAX, Math.max(SCALE_MIN, rawScale)));
+      setStatus("Resting in your open hand", "holding");
     }
 
     drawCursor(px, py, pinching);
   } else {
     lastDrawPx = null;
-    held = false;
-    setStatus("Show your hand to the camera", "ready");
-  }
-
-  if (holoGroup && !held) {
-    holoGroup.rotation.y += 0.008;
-    holoGroup.position.y = holoBaseY + Math.sin(nowMs * 0.0012) * 0.04;
+    pinkyWasUp = false;
+    setStatus(mode === "holo" ? "Show your hand to see the hologram" : "Show your hand to the camera", "ready");
   }
 
   if (renderer) renderer.render(scene, camera3d);
   requestAnimationFrame(loop);
 }
 
-extrudeBtn.addEventListener("click", () => {
-  const shape2D = preparePathForExtrusion(strokePoints, { simplifyTolerance: 0.008, targetSize: 1.3 });
-  if (!shape2D) {
-    setStatus("Sketch a bit more before extruding", "drawing");
-    return;
-  }
-  buildHologram(shape2D, currentColor);
-  mode = "holo";
-  clearDrawCanvas();
-  extrudeBtn.disabled = true;
-  setStatus("Hologram floating — pinch to pick it up", "ready");
-});
-
 clearBtn.addEventListener("click", () => {
   clearDrawCanvas();
   strokePoints = [];
   lastDrawPx = null;
-  extrudeBtn.disabled = true;
+  pinkyWasUp = false;
+  referencePalmWidth = null;
   if (holoGroup) {
     scene.remove(holoGroup);
     holoGroup = null;
   }
-  held = false;
   mode = "draw";
   setStatus("Pinch thumb + index to sketch", "ready");
 });

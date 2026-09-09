@@ -10,6 +10,7 @@ export const LM = {
   INDEX_TIP: 8,
   MIDDLE_MCP: 9,
   PINKY_MCP: 17,
+  PINKY_TIP: 20,
 };
 
 function dist2D(a, b) {
@@ -50,6 +51,34 @@ export function handRotation(landmarks) {
   const wrist = landmarks[LM.WRIST];
   const mid = landmarks[LM.MIDDLE_MCP];
   return Math.atan2(mid.y - wrist.y, mid.x - wrist.x);
+}
+
+// How extended a finger is: ratio of (wrist -> tip) to (wrist -> its own
+// MCP) distance. Rotation-invariant (pure distances, no axis assumption),
+// so it works regardless of how the hand is oriented toward the camera.
+// A curled finger keeps its tip close to the wrist (ratio near/under 1);
+// a straightened finger pushes the tip much farther out.
+function fingerExtensionRatio(landmarks, tipIdx, mcpIdx) {
+  const wrist = landmarks[LM.WRIST];
+  const mcpDist = dist2D(wrist, landmarks[mcpIdx]);
+  if (mcpDist === 0) return 0;
+  return dist2D(wrist, landmarks[tipIdx]) / mcpDist;
+}
+
+// Detects the "raise your pinky" gesture: just the pinky extended.
+export function isPinkyUp(landmarks, threshold = 1.5) {
+  return fingerExtensionRatio(landmarks, LM.PINKY_TIP, LM.PINKY_MCP) > threshold;
+}
+
+// A stable anchor point for "resting in your open hand": the average of
+// the wrist and the index/middle/pinky knuckles, roughly the palm's
+// center regardless of how the fingers are currently posed.
+export function palmCenter(landmarks) {
+  const pts = [landmarks[LM.WRIST], landmarks[LM.INDEX_MCP], landmarks[LM.MIDDLE_MCP], landmarks[LM.PINKY_MCP]];
+  const x = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+  const y = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  const z = pts.reduce((s, p) => s + (p.z ?? 0), 0) / pts.length;
+  return { x, y, z };
 }
 
 // Debounces a raw per-frame boolean (e.g. pinch state) so jitter near the
