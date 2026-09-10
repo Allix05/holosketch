@@ -8,7 +8,7 @@ const COLORS = ["#4df3ff", "#ff8a3d", "#4dffa0", "#ff4dc4", "#ffffff"];
 const MIN_STROKE_POINTS = 8;
 const DEPTH_BASE = 3.0;
 const TARGET_SIZE = 0.5; // world-unit size the drawn shape is normalized to at scale 1
-const GRIP_FIT = 0.4; // fraction of the live finger gap the object's size should fill, leaving a small margin
+const GRIP_FIT = 0.25; // fraction of the live finger gap the object's size should fill, leaving a small margin
 const SCALE_MIN = 0.15;
 const SCALE_MAX = 4;
 const MATERIALIZE_MS = 500;
@@ -17,9 +17,11 @@ const MATERIALIZE_MS = 500;
 // Raw per-frame hand-landmark estimates are noisy enough that tracking
 // them directly makes a held object look shaky; smoothing this way is
 // what makes it read as a solid object rather than a nervous overlay.
-const POSITION_SMOOTH = 0.28;
-const ROTATION_SMOOTH = 0.22;
-const SCALE_SMOOTH = 0.22;
+// Biased toward snappier than smoother, since a hologram that visibly
+// lags behind a moving hand reads as broken/detached, not solid.
+const POSITION_SMOOTH = 0.45;
+const ROTATION_SMOOTH = 0.3;
+const SCALE_SMOOTH = 0.32;
 
 const video = document.getElementById("video");
 const stage = document.querySelector(".stage");
