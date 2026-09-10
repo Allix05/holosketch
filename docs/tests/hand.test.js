@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pinchRatio, isPinching, penPoint, holdPoint, palmWidth, handRotation, isPinkyUp, isThumbUp, wristTwistAngle, handLength, Debouncer, LM } from "../hand.js";
+import { pinchRatio, isPinching, penPoint, holdPoint, palmWidth, handRotation, isPinkyUp, isThumbUp, wristTwistAngle, gripWidth, Debouncer, LM } from "../hand.js";
 
 function baseLandmarks() {
   return Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5, z: 0 }));
@@ -115,17 +115,15 @@ test("wristTwistAngle points from the index knuckle toward the pinky knuckle", (
   assert.ok(Math.abs(wristTwistAngle(lm) - Math.PI / 2) < 1e-9);
 });
 
-test("handLength measures the wrist-to-middle-knuckle distance, unaffected by knuckle-line width", () => {
+test("gripWidth measures the live distance between the thumb and middle fingertips", () => {
   const lm = baseLandmarks();
-  lm[LM.WRIST] = { x: 0, y: 0, z: 0 };
-  lm[LM.MIDDLE_MCP] = { x: 0, y: 0.4, z: 0 };
-  assert.ok(Math.abs(handLength(lm) - 0.4) < 1e-9);
+  lm[LM.THUMB_TIP] = { x: 0, y: 0, z: 0 };
+  lm[LM.MIDDLE_TIP] = { x: 0.3, y: 0.4, z: 0 };
+  assert.ok(Math.abs(gripWidth(lm) - 0.5) < 1e-9);
 
-  // Twisting the wrist changes the knuckle-line width/angle but shouldn't
-  // move the middle knuckle itself, so handLength stays the same.
-  lm[LM.INDEX_MCP] = { x: -0.2, y: 0.35, z: 0 };
-  lm[LM.PINKY_MCP] = { x: 0.05, y: 0.42, z: 0 };
-  assert.ok(Math.abs(handLength(lm) - 0.4) < 1e-9);
+  // Squeezing the fingers together shrinks it.
+  lm[LM.MIDDLE_TIP] = { x: 0.06, y: 0.08, z: 0 };
+  assert.ok(Math.abs(gripWidth(lm) - 0.1) < 1e-9);
 });
 
 test("a curled thumb (tip near its own base) is not raised", () => {

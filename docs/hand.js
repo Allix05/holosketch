@@ -96,14 +96,15 @@ export function wristTwistAngle(landmarks) {
   return Math.atan2(b.y - a.y, b.x - a.x);
 }
 
-// Distance from the wrist to the middle-finger knuckle: a depth cue like
-// palmWidth (bigger == closer), but measured along the forearm's own
-// axis instead of across it. Twisting the wrist rotates around that
-// axis, so unlike palmWidth (which foreshortens as the knuckle line
-// turns edge-on), this stays roughly stable during a pure twist -- so
-// distance/scale doesn't get dragged around by rotation.
-export function handLength(landmarks) {
-  return dist2D(landmarks[LM.WRIST], landmarks[LM.MIDDLE_MCP]);
+// Distance between the thumb and middle fingertips -- the same two
+// points that define holdPoint. Drives the hologram's scale directly: as
+// you pinch your fingers together, this shrinks and the object shrinks
+// with it, so it never visually pokes out past your fingertips; moving
+// your whole hand closer to the camera also grows this gap in the image,
+// so a single measurement naturally covers both "squeeze to resize" and
+// "distance from the camera" without the two fighting each other.
+export function gripWidth(landmarks) {
+  return dist2D(landmarks[LM.THUMB_TIP], landmarks[LM.MIDDLE_TIP]);
 }
 
 // A finger is "extended" when it continues in roughly a straight line

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 
-import { isPinching, isPinkyUp, isThumbUp, penPoint, holdPoint, handLength, wristTwistAngle, Debouncer } from "./hand.js";
+import { isPinching, isPinkyUp, isThumbUp, penPoint, holdPoint, gripWidth, wristTwistAngle, Debouncer } from "./hand.js";
 import { preparePathForExtrusion } from "./path.js";
 
 const COLORS = ["#4df3ff", "#ff8a3d", "#4dffa0", "#ff4dc4", "#ffffff"];
@@ -63,7 +63,7 @@ function setStatus(text, dotClass) {
 // ---- Three.js scene -------------------------------------------------
 
 let renderer, scene, camera3d, holoGroup = null;
-let referenceHandLength = null;
+let referenceGripWidth = null;
 let smoothedScale = 1;
 
 function initThree() {
@@ -191,7 +191,7 @@ function drawCursor(px, py, pinching) {
 function extrude(landmarks) {
   const shape2D = preparePathForExtrusion(strokePoints, { simplifyTolerance: 0.008, targetSize: 0.5 });
   if (!shape2D) return;
-  referenceHandLength = handLength(landmarks);
+  referenceGripWidth = Math.max(gripWidth(landmarks), 0.02);
   smoothedScale = 1;
 
   const hp = holdPoint(landmarks);
@@ -344,10 +344,12 @@ function loop() {
       // every frame, no separate "grab" gesture and no scripted idle
       // animation. Twisting the wrist spins it around the vertical axis
       // (a real 3D turn that reveals its extruded depth), while its size
-      // follows hand distance from the camera. Everything is smoothed
-      // toward its target rather than snapped, so it reads as a solid
-      // object settling in your hand instead of jittering with every
-      // small tracking error.
+      // tracks the live gap between those same two fingers -- squeeze
+      // them together and it shrinks with them, so your fingers never
+      // visually pass through it. Everything is smoothed toward its
+      // target rather than snapped, so it reads as a solid object
+      // settling in your hand instead of jittering with every small
+      // tracking error.
       const hp = holdPoint(landmarks);
       const targetWorld = screenToWorld(hp.x, hp.y, DEPTH_BASE);
       holoGroup.position.x += (targetWorld.x - holoGroup.position.x) * POSITION_SMOOTH;
@@ -355,7 +357,7 @@ function loop() {
       holoGroup.position.z += (targetWorld.z - holoGroup.position.z) * POSITION_SMOOTH;
       holoGroup.rotation.y = lerpAngle(holoGroup.rotation.y, -wristTwistAngle(landmarks), ROTATION_SMOOTH);
 
-      const targetScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, handLength(landmarks) / referenceHandLength));
+      const targetScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, gripWidth(landmarks) / referenceGripWidth));
       smoothedScale += (targetScale - smoothedScale) * SCALE_SMOOTH;
       let scale = smoothedScale;
       if (materializeT !== null) {
@@ -383,7 +385,7 @@ clearBtn.addEventListener("click", () => {
   strokePoints = [];
   lastDrawPx = null;
   shakaWasUp = false;
-  referenceHandLength = null;
+  referenceGripWidth = null;
   smoothedScale = 1;
   materializeStart = null;
   if (holoGroup) {
