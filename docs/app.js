@@ -7,8 +7,10 @@ import { preparePathForExtrusion } from "./path.js";
 const COLORS = ["#4df3ff", "#ff8a3d", "#4dffa0", "#ff4dc4", "#ffffff"];
 const MIN_STROKE_POINTS = 8;
 const DEPTH_BASE = 3.0;
-const SCALE_MIN = 0.4;
-const SCALE_MAX = 2.4;
+const TARGET_SIZE = 0.5; // world-unit size the drawn shape is normalized to at scale 1
+const GRIP_FIT = 0.7; // fraction of the live finger gap the object's size should fill, leaving a small margin
+const SCALE_MIN = 0.15;
+const SCALE_MAX = 4;
 const MATERIALIZE_MS = 500;
 // Per-frame blend factors (0..1) toward the freshly tracked target each
 // frame -- lower means smoother/laggier, higher means snappier/jitterier.
@@ -63,7 +65,6 @@ function setStatus(text, dotClass) {
 // ---- Three.js scene -------------------------------------------------
 
 let renderer, scene, camera3d, holoGroup = null;
-let referenceGripWidth = null;
 let smoothedScale = 1;
 
 function initThree() {
@@ -93,16 +94,23 @@ function resizeAll() {
   }
 }
 
+// The width/height (world units) visible at a given depth in front of the
+// camera -- shared by screenToWorld (position) and the grip-to-world-size
+// conversion (scale), so both agree on the same projection.
+function visibleSizeAtDepth(depth) {
+  const vFov = (camera3d.fov * Math.PI) / 180;
+  const visibleHeight = 2 * Math.tan(vFov / 2) * depth;
+  return { width: visibleHeight * camera3d.aspect, height: visibleHeight };
+}
+
 // Maps normalized (0..1) screen coordinates to a world position at the
 // given depth (distance in front of the camera), so a hologram "stuck" to
 // a screen position via this function visually tracks the hand.
 function screenToWorld(nx, ny, depth) {
-  const vFov = (camera3d.fov * Math.PI) / 180;
-  const visibleHeight = 2 * Math.tan(vFov / 2) * depth;
-  const visibleWidth = visibleHeight * camera3d.aspect;
+  const { width, height } = visibleSizeAtDepth(depth);
   return {
-    x: (nx - 0.5) * visibleWidth,
-    y: -(ny - 0.5) * visibleHeight,
+    x: (nx - 0.5) * width,
+    y: -(ny - 0.5) * height,
     z: -depth,
   };
 }
@@ -189,9 +197,8 @@ function drawCursor(px, py, pinching) {
 }
 
 function extrude(landmarks) {
-  const shape2D = preparePathForExtrusion(strokePoints, { simplifyTolerance: 0.008, targetSize: 0.5 });
+  const shape2D = preparePathForExtrusion(strokePoints, { simplifyTolerance: 0.008, targetSize: TARGET_SIZE });
   if (!shape2D) return;
-  referenceGripWidth = Math.max(gripWidth(landmarks), 0.02);
   smoothedScale = 1;
 
   const hp = holdPoint(landmarks);
@@ -344,12 +351,13 @@ function loop() {
       // every frame, no separate "grab" gesture and no scripted idle
       // animation. Twisting the wrist spins it around the vertical axis
       // (a real 3D turn that reveals its extruded depth), while its size
-      // tracks the live gap between those same two fingers -- squeeze
-      // them together and it shrinks with them, so your fingers never
-      // visually pass through it. Everything is smoothed toward its
-      // target rather than snapped, so it reads as a solid object
-      // settling in your hand instead of jittering with every small
-      // tracking error.
+      // is set directly from the live gap between those same two fingers
+      // (converted to world units at its depth) so it always fits snugly
+      // between them with a small margin -- not a ratio to whatever the
+      // gap happened to be when it was created, an actual live fit every
+      // frame. Everything is smoothed toward its target rather than
+      // snapped, so it reads as a solid object settling in your hand
+      // instead of jittering with every small tracking error.
       const hp = holdPoint(landmarks);
       const targetWorld = screenToWorld(hp.x, hp.y, DEPTH_BASE);
       holoGroup.position.x += (targetWorld.x - holoGroup.position.x) * POSITION_SMOOTH;
@@ -357,7 +365,8 @@ function loop() {
       holoGroup.position.z += (targetWorld.z - holoGroup.position.z) * POSITION_SMOOTH;
       holoGroup.rotation.y = lerpAngle(holoGroup.rotation.y, -wristTwistAngle(landmarks), ROTATION_SMOOTH);
 
-      const targetScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, gripWidth(landmarks) / referenceGripWidth));
+      const gripWorldSize = gripWidth(landmarks) * visibleSizeAtDepth(DEPTH_BASE).width;
+      const targetScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, (gripWorldSize * GRIP_FIT) / TARGET_SIZE));
       smoothedScale += (targetScale - smoothedScale) * SCALE_SMOOTH;
       let scale = smoothedScale;
       if (materializeT !== null) {
@@ -385,7 +394,6 @@ clearBtn.addEventListener("click", () => {
   strokePoints = [];
   lastDrawPx = null;
   shakaWasUp = false;
-  referenceGripWidth = null;
   smoothedScale = 1;
   materializeStart = null;
   if (holoGroup) {
