@@ -20,6 +20,11 @@ function dist2D(a, b) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+function dist3D(a, b) {
+  const dx = a.x - b.x, dy = a.y - b.y, dz = (a.z ?? 0) - (b.z ?? 0);
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
 // Distance between thumb and index fingertips, normalized by palm width
 // (index_mcp to pinky_mcp) so the pinch threshold works regardless of how
 // close or far the hand is from the camera.
@@ -86,15 +91,18 @@ export function handLength(landmarks) {
 }
 
 // How extended a finger is: ratio of (wrist -> tip) to (wrist -> its own
-// MCP) distance. Rotation-invariant (pure distances, no axis assumption),
-// so it works regardless of how the hand is oriented toward the camera.
-// A curled finger keeps its tip close to the wrist (ratio near/under 1);
-// a straightened finger pushes the tip much farther out.
+// MCP) distance, in full 3D (including depth). A curled finger keeps its
+// tip close to the wrist (ratio near/under 1); a straightened finger
+// pushes the tip much farther out. Using 3D distance -- not just the
+// flattened x/y image plane -- matters a lot here: when the palm faces
+// the camera dead-on, extending the thumb or pinky moves the tip mostly
+// toward/away from the camera (depth) rather than sideways in the image,
+// so a 2D-only distance barely changes and misses the gesture entirely.
 function fingerExtensionRatio(landmarks, tipIdx, mcpIdx) {
   const wrist = landmarks[LM.WRIST];
-  const mcpDist = dist2D(wrist, landmarks[mcpIdx]);
+  const mcpDist = dist3D(wrist, landmarks[mcpIdx]);
   if (mcpDist === 0) return 0;
-  return dist2D(wrist, landmarks[tipIdx]) / mcpDist;
+  return dist3D(wrist, landmarks[tipIdx]) / mcpDist;
 }
 
 // Detects the "raise your pinky" gesture: just the pinky extended.

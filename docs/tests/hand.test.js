@@ -93,6 +93,17 @@ test("a straightened pinky (tip far past the MCP) is raised", () => {
   assert.equal(isPinkyUp(lm), true);
 });
 
+test("isPinkyUp also detects extension that happens mostly in depth (palm facing the camera)", () => {
+  const lm = baseLandmarks();
+  lm[LM.WRIST] = { x: 0, y: 0, z: 0 };
+  lm[LM.PINKY_MCP] = { x: 0, y: 0.3, z: 0 };
+  // Same x/y as the MCP -- a purely 2D check would see this as curled --
+  // but pushed far toward the camera in z, which is what pinky extension
+  // looks like from the camera's point of view when the palm faces it.
+  lm[LM.PINKY_TIP] = { x: 0, y: 0.3, z: -0.5 };
+  assert.equal(isPinkyUp(lm), true);
+});
+
 test("wristTwistAngle points from the index knuckle toward the pinky knuckle", () => {
   const lm = baseLandmarks();
   lm[LM.INDEX_MCP] = { x: 0, y: 0, z: 0 };
@@ -129,5 +140,16 @@ test("a straightened thumb (tip pushed well past its base) is raised", () => {
   lm[LM.WRIST] = { x: 0, y: 0.3, z: 0 };
   lm[LM.THUMB_MCP] = { x: 0.05, y: 0.28, z: 0 };
   lm[LM.THUMB_TIP] = { x: 0.35, y: 0.1, z: 0 };
+  assert.equal(isThumbUp(lm), true);
+});
+
+test("isThumbUp also detects extension that happens mostly in depth (palm facing the camera)", () => {
+  const lm = baseLandmarks();
+  lm[LM.WRIST] = { x: 0, y: 0.3, z: 0 };
+  lm[LM.THUMB_MCP] = { x: 0, y: 0.28, z: 0 };
+  // Same x/y as the MCP -- a purely 2D check would see this as curled --
+  // but pushed far toward the camera in z, which is what thumb extension
+  // looks like from the camera's point of view when the palm faces it.
+  lm[LM.THUMB_TIP] = { x: 0, y: 0.28, z: -0.4 };
   assert.equal(isThumbUp(lm), true);
 });
