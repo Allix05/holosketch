@@ -97,33 +97,6 @@ export function isThumbUp(landmarks, threshold = 1.4) {
   return fingerExtensionRatio(landmarks, LM.THUMB_TIP, LM.THUMB_MCP) > threshold;
 }
 
-// A resting point that sits ON the open palm rather than centered inside
-// the hand mass: start from the knuckle line (index/middle/pinky MCPs,
-// which excludes the wrist so it doesn't get pulled low toward the
-// forearm), then lift further along the hand's own axis (wrist -> middle
-// knuckle) so the point floats just above the palm surface, roughly
-// where a small object would actually rest in an open hand.
-export function palmRestPoint(landmarks) {
-  const wrist = landmarks[LM.WRIST];
-  const indexMcp = landmarks[LM.INDEX_MCP];
-  const midMcp = landmarks[LM.MIDDLE_MCP];
-  const pinkyMcp = landmarks[LM.PINKY_MCP];
-
-  const knuckleX = (indexMcp.x + midMcp.x + pinkyMcp.x) / 3;
-  const knuckleY = (indexMcp.y + midMcp.y + pinkyMcp.y) / 3;
-  const knuckleZ = ((indexMcp.z ?? 0) + (midMcp.z ?? 0) + (pinkyMcp.z ?? 0)) / 3;
-
-  const dx = midMcp.x - wrist.x, dy = midMcp.y - wrist.y;
-  const axisLen = Math.hypot(dx, dy) || 1;
-  const lift = axisLen * 0.5;
-
-  return {
-    x: knuckleX + (dx / axisLen) * lift,
-    y: knuckleY + (dy / axisLen) * lift,
-    z: knuckleZ,
-  };
-}
-
 // Debounces a raw per-frame boolean (e.g. pinch state) so jitter near the
 // threshold doesn't produce flickery grab/release toggling.
 export class Debouncer {

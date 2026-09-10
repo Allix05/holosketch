@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 
-import { isPinching, isPinkyUp, isThumbUp, penPoint, palmRestPoint, handLength, wristTwistAngle, Debouncer } from "./hand.js";
+import { isPinching, isPinkyUp, isThumbUp, penPoint, handLength, wristTwistAngle, Debouncer } from "./hand.js";
 import { preparePathForExtrusion } from "./path.js";
 
 const COLORS = ["#4df3ff", "#ff8a3d", "#4dffa0", "#ff4dc4", "#ffffff"];
@@ -171,7 +171,7 @@ function drawCursor(px, py, pinching) {
 }
 
 function extrude(landmarks) {
-  const shape2D = preparePathForExtrusion(strokePoints, { simplifyTolerance: 0.008, targetSize: 1.3 });
+  const shape2D = preparePathForExtrusion(strokePoints, { simplifyTolerance: 0.008, targetSize: 0.5 });
   if (!shape2D) return;
   referenceHandLength = handLength(landmarks);
   buildHologram(shape2D, currentColor);
@@ -303,7 +303,7 @@ function loop() {
         );
       }
 
-      const shakaUp = shakaDebouncer.update(isThumbUp(landmarks) && isPinkyUp(landmarks));
+      const shakaUp = shakaDebouncer.update(isThumbUp(landmarks, 1.2) && isPinkyUp(landmarks, 1.3));
       if (shakaUp && !shakaWasUp && strokePoints.length >= MIN_STROKE_POINTS) {
         extrude(landmarks);
       }
@@ -311,12 +311,13 @@ function loop() {
     } else if (mode === "holo" && holoGroup) {
       // The hologram continuously rests in your open hand: position, spin,
       // and apparent size all track the hand live, every frame -- no
-      // separate "grab" gesture and no scripted idle animation. Twisting
-      // the wrist spins it around the vertical axis (a real 3D turn that
-      // reveals its extruded depth), while its position and size follow
-      // the palm's screen position and distance from the camera.
-      const restPoint = palmRestPoint(landmarks);
-      const world = screenToWorld(restPoint.x, restPoint.y, DEPTH_BASE);
+      // separate "grab" gesture and no scripted idle animation. It's
+      // anchored to the same tracked point as the on-screen cursor dot
+      // (thumb-index midpoint), so it visibly sits right where the dot is.
+      // Twisting the wrist spins it around the vertical axis (a real 3D
+      // turn that reveals its extruded depth), while its size follows
+      // hand distance from the camera.
+      const world = screenToWorld(p.x, p.y, DEPTH_BASE);
       holoGroup.position.set(world.x, world.y, world.z);
       holoGroup.rotation.y = -wristTwistAngle(landmarks);
       const rawScale = handLength(landmarks) / referenceHandLength;
