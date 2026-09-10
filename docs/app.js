@@ -117,6 +117,41 @@ function screenToWorld(nx, ny, depth) {
   };
 }
 
+// Hand-tracking coordinates are normalized to the FULL raw camera frame,
+// but the video element (and every canvas layered on it) is cropped to
+// its box via object-fit:cover whenever the camera's actual aspect ratio
+// doesn't match the display box's aspect ratio (640x480 was requested,
+// but many webcams ignore that and negotiate 16:9 or something else
+// entirely). Without correcting for that crop, anything off-center gets
+// progressively more wrong toward the edges of the frame. This remaps
+// every landmark from raw-frame-normalized into visible-frame-normalized
+// coordinates, so everything downstream -- drawing, gestures, position,
+// size -- works in the same space the pixels are actually shown in.
+function remapToVisibleFrame(landmarks) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return landmarks;
+  const videoAspect = vw / vh;
+  const rect = video.getBoundingClientRect();
+  const boxAspect = rect.width / (rect.height || 1);
+  if (!boxAspect || Math.abs(videoAspect - boxAspect) < 1e-3) return landmarks;
+
+  let scaleX = 1, offsetX = 0, scaleY = 1, offsetY = 0;
+  if (videoAspect > boxAspect) {
+    // Video is relatively wider than the box -- sides get cropped.
+    scaleX = boxAspect / videoAspect;
+    offsetX = (1 - scaleX) / 2;
+  } else {
+    // Video is relatively taller than the box -- top/bottom get cropped.
+    scaleY = videoAspect / boxAspect;
+    offsetY = (1 - scaleY) / 2;
+  }
+  return landmarks.map((lm) => ({
+    x: (lm.x - offsetX) / scaleX,
+    y: (lm.y - offsetY) / scaleY,
+    z: lm.z,
+  }));
+}
+
 function applyColorToHolo(group, hex) {
   const color = new THREE.Color(hex);
   group.traverse((obj) => {
@@ -296,7 +331,8 @@ function loop() {
   const nowMs = performance.now();
   const materializeT = drawMaterializeFlash(nowMs);
   const result = handLandmarker.detectForVideo(video, nowMs);
-  const landmarks = (result.landmarks || [])[0];
+  const rawLandmarks = (result.landmarks || [])[0];
+  const landmarks = rawLandmarks && remapToVisibleFrame(rawLandmarks);
 
   if (landmarks) {
     const pinching = pinchDebouncer.update(isPinching(landmarks));
