@@ -13,7 +13,7 @@
   <div class="page">
     <header class="hero">
       <h1>Draw It. <span class="accent">Hold It.</span></h1>
-      <p class="subtitle">Pinch your thumb and index finger to sketch a shape in the air, then throw a <strong>shaka (🤙 thumb + pinky)</strong> and it becomes a real 3D hologram &mdash; resting right on your open hand. Move your hand to carry it, turn your wrist to spin it, and bring your hand closer or farther from the camera to make it bigger or smaller. Runs <strong>entirely in your browser</strong>, no server, video never leaves your device.</p>
+      <p class="subtitle">Pinch your thumb and index finger to sketch a shape in the air, then throw a <strong>shaka (🤙 thumb + pinky)</strong> and it becomes a real 3D hologram &mdash; floating right between your thumb and middle finger like you're actually holding it. Move your hand to carry it, turn your wrist to spin it, and bring your hand closer or farther from the camera to make it bigger or smaller. Runs <strong>entirely in your browser</strong>, no server, video never leaves your device.</p>
     </header>
 
     <main class="stage-wrap">
@@ -56,7 +56,7 @@
       <ul>
         <li><strong>Draw</strong> &mdash; MediaPipe's Hand Landmarker tracks your hand at 21 points; pinching thumb + index draws a stroke on an invisible plane in front of the camera.</li>
         <li><strong>Shaka (🤙)</strong> &mdash; raise thumb + pinky and the stroke is simplified into a clean polygon (Ramer&ndash;Douglas&ndash;Peucker), closed if needed, and extruded into real 3D geometry with Three.js/WebGL &mdash; a genuine solid, not a flat sprite &mdash; with a materializing flash as it snaps into being.</li>
-        <li><strong>Hold</strong> &mdash; no separate grab gesture: every frame, the hologram's position, spin, and size are driven live by your open hand's palm position, wrist rotation, and distance from the camera &mdash; resting on your open hand like a real object.</li>
+        <li><strong>Hold</strong> &mdash; no separate grab gesture: every frame, the hologram's position, spin, and size are driven live by the point between your thumb and middle finger, your wrist rotation, and your distance from the camera &mdash; smoothed frame to frame so it settles like a real object instead of jittering with tracking noise.</li>
       </ul>
     </section>
 

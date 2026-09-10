@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pinchRatio, isPinching, penPoint, palmWidth, handRotation, isPinkyUp, isThumbUp, wristTwistAngle, handLength, Debouncer, LM } from "../hand.js";
+import { pinchRatio, isPinching, penPoint, holdPoint, palmWidth, handRotation, isPinkyUp, isThumbUp, wristTwistAngle, handLength, Debouncer, LM } from "../hand.js";
 
 function baseLandmarks() {
   return Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5, z: 0 }));
@@ -33,6 +33,16 @@ test("penPoint is the midpoint of thumb and index tips (including z)", () => {
   assert.ok(Math.abs(p.x - 0.4) < 1e-9);
   assert.ok(Math.abs(p.y - 0.6) < 1e-9);
   assert.ok(Math.abs(p.z - 0.2) < 1e-9);
+});
+
+test("holdPoint is the midpoint of the thumb and middle fingertips", () => {
+  const lm = baseLandmarks();
+  lm[LM.THUMB_TIP] = { x: 0.2, y: 0.6, z: 0.05 };
+  lm[LM.MIDDLE_TIP] = { x: 0.6, y: 0.2, z: 0.15 };
+  const p = holdPoint(lm);
+  assert.ok(Math.abs(p.x - 0.4) < 1e-9);
+  assert.ok(Math.abs(p.y - 0.4) < 1e-9);
+  assert.ok(Math.abs(p.z - 0.1) < 1e-9);
 });
 
 test("palmWidth measures the index-to-pinky base distance", () => {

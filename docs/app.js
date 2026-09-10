@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 
-import { isPinching, isPinkyUp, isThumbUp, penPoint, handLength, wristTwistAngle, Debouncer } from "./hand.js";
+import { isPinching, isPinkyUp, isThumbUp, penPoint, holdPoint, handLength, wristTwistAngle, Debouncer } from "./hand.js";
 import { preparePathForExtrusion } from "./path.js";
 
 const COLORS = ["#4df3ff", "#ff8a3d", "#4dffa0", "#ff4dc4", "#ffffff"];
@@ -10,6 +10,14 @@ const DEPTH_BASE = 3.0;
 const SCALE_MIN = 0.4;
 const SCALE_MAX = 2.4;
 const MATERIALIZE_MS = 500;
+// Per-frame blend factors (0..1) toward the freshly tracked target each
+// frame -- lower means smoother/laggier, higher means snappier/jitterier.
+// Raw per-frame hand-landmark estimates are noisy enough that tracking
+// them directly makes a held object look shaky; smoothing this way is
+// what makes it read as a solid object rather than a nervous overlay.
+const POSITION_SMOOTH = 0.28;
+const ROTATION_SMOOTH = 0.22;
+const SCALE_SMOOTH = 0.22;
 
 const video = document.getElementById("video");
 const stage = document.querySelector(".stage");
@@ -56,6 +64,7 @@ function setStatus(text, dotClass) {
 
 let renderer, scene, camera3d, holoGroup = null;
 let referenceHandLength = null;
+let smoothedScale = 1;
 
 function initThree() {
   renderer = new THREE.WebGLRenderer({ canvas: glCanvas, alpha: true, antialias: true });
@@ -105,7 +114,17 @@ function applyColorToHolo(group, hex) {
   });
 }
 
-function buildHologram(points2D, hex) {
+// Interpolates an angle (radians) toward a target by the shortest path,
+// so smoothing never spins the long way around when the tracked angle
+// crosses the +-PI wraparound.
+function lerpAngle(from, to, t) {
+  let diff = (to - from) % (Math.PI * 2);
+  if (diff > Math.PI) diff -= Math.PI * 2;
+  if (diff < -Math.PI) diff += Math.PI * 2;
+  return from + diff * t;
+}
+
+function buildHologram(points2D, hex, startWorld) {
   const shape = new THREE.Shape();
   shape.moveTo(points2D[0].x, points2D[0].y);
   for (let i = 1; i < points2D.length; i++) shape.lineTo(points2D[i].x, points2D[i].y);
@@ -134,8 +153,7 @@ function buildHologram(points2D, hex) {
   group.add(fillMesh);
   group.add(wireframe);
 
-  const world = screenToWorld(0.5, 0.5, DEPTH_BASE);
-  group.position.set(world.x, world.y, world.z);
+  group.position.set(startWorld.x, startWorld.y, startWorld.z);
 
   if (holoGroup) scene.remove(holoGroup);
   holoGroup = group;
@@ -174,14 +192,19 @@ function extrude(landmarks) {
   const shape2D = preparePathForExtrusion(strokePoints, { simplifyTolerance: 0.008, targetSize: 0.5 });
   if (!shape2D) return;
   referenceHandLength = handLength(landmarks);
-  buildHologram(shape2D, currentColor);
+  smoothedScale = 1;
+
+  const hp = holdPoint(landmarks);
+  const startWorld = screenToWorld(hp.x, hp.y, DEPTH_BASE);
+  buildHologram(shape2D, currentColor, startWorld);
+  holoGroup.rotation.y = -wristTwistAngle(landmarks);
+
   mode = "holo";
   clearDrawCanvas();
-  setStatus("Resting in your open hand", "holding");
+  setStatus("Floating between your fingers", "holding");
 
-  const p = penPoint(landmarks);
   materializeStart = performance.now();
-  materializeOriginPx = { x: p.x * overlay.width, y: p.y * overlay.height };
+  materializeOriginPx = { x: hp.x * overlay.width, y: hp.y * overlay.height };
   materializeColor = currentColor;
 }
 
@@ -308,20 +331,31 @@ function loop() {
         extrude(landmarks);
       }
       shakaWasUp = shakaUp;
+
+      // Only shown while sketching -- once the hologram exists it's its
+      // own indicator of where your hand is, so the tracking dot goes away.
+      drawCursor(px, py, pinching);
     } else if (mode === "holo" && holoGroup) {
-      // The hologram continuously rests in your open hand: position, spin,
-      // and apparent size all track the hand live, every frame -- no
-      // separate "grab" gesture and no scripted idle animation. It's
-      // anchored to the same tracked point as the on-screen cursor dot
-      // (thumb-index midpoint), so it visibly sits right where the dot is.
-      // Twisting the wrist spins it around the vertical axis (a real 3D
-      // turn that reveals its extruded depth), while its size follows
-      // hand distance from the camera.
-      const world = screenToWorld(p.x, p.y, DEPTH_BASE);
-      holoGroup.position.set(world.x, world.y, world.z);
-      holoGroup.rotation.y = -wristTwistAngle(landmarks);
-      const rawScale = handLength(landmarks) / referenceHandLength;
-      let scale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, rawScale));
+      // The hologram continuously rests between your thumb and middle
+      // finger -- a natural "holding a small object" grip -- with its
+      // position, spin, and apparent size all tracking the hand live,
+      // every frame, no separate "grab" gesture and no scripted idle
+      // animation. Twisting the wrist spins it around the vertical axis
+      // (a real 3D turn that reveals its extruded depth), while its size
+      // follows hand distance from the camera. Everything is smoothed
+      // toward its target rather than snapped, so it reads as a solid
+      // object settling in your hand instead of jittering with every
+      // small tracking error.
+      const hp = holdPoint(landmarks);
+      const targetWorld = screenToWorld(hp.x, hp.y, DEPTH_BASE);
+      holoGroup.position.x += (targetWorld.x - holoGroup.position.x) * POSITION_SMOOTH;
+      holoGroup.position.y += (targetWorld.y - holoGroup.position.y) * POSITION_SMOOTH;
+      holoGroup.position.z += (targetWorld.z - holoGroup.position.z) * POSITION_SMOOTH;
+      holoGroup.rotation.y = lerpAngle(holoGroup.rotation.y, -wristTwistAngle(landmarks), ROTATION_SMOOTH);
+
+      const targetScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, handLength(landmarks) / referenceHandLength));
+      smoothedScale += (targetScale - smoothedScale) * SCALE_SMOOTH;
+      let scale = smoothedScale;
       if (materializeT !== null) {
         const eased = materializeT * materializeT * (3 - 2 * materializeT); // smoothstep
         scale *= eased;
@@ -330,10 +364,8 @@ function loop() {
         });
       }
       holoGroup.scale.setScalar(scale);
-      setStatus("Resting in your open hand", "holding");
+      setStatus("Floating between your fingers", "holding");
     }
-
-    drawCursor(px, py, pinching);
   } else {
     lastDrawPx = null;
     shakaWasUp = false;
@@ -350,6 +382,7 @@ clearBtn.addEventListener("click", () => {
   lastDrawPx = null;
   shakaWasUp = false;
   referenceHandLength = null;
+  smoothedScale = 1;
   materializeStart = null;
   if (holoGroup) {
     scene.remove(holoGroup);

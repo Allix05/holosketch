@@ -10,6 +10,7 @@ export const LM = {
   INDEX_MCP: 5,
   INDEX_TIP: 8,
   MIDDLE_MCP: 9,
+  MIDDLE_TIP: 12,
   PINKY_MCP: 17,
   PINKY_TIP: 20,
 };
@@ -32,9 +33,18 @@ export function isPinching(landmarks, threshold = 0.55) {
   return pinchRatio(landmarks) < threshold;
 }
 
-// The point to draw/grab at: the midpoint between thumb tip and index tip.
+// The point to draw at: the midpoint between thumb tip and index tip
+// (the sketching pinch).
 export function penPoint(landmarks) {
   const a = landmarks[LM.THUMB_TIP], b = landmarks[LM.INDEX_TIP];
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: ((a.z ?? 0) + (b.z ?? 0)) / 2 };
+}
+
+// The point to anchor a held object at: the midpoint between thumb tip
+// and middle-finger tip -- a natural grip for a small floating object,
+// distinct from the thumb+index pinch used for sketching.
+export function holdPoint(landmarks) {
+  const a = landmarks[LM.THUMB_TIP], b = landmarks[LM.MIDDLE_TIP];
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: ((a.z ?? 0) + (b.z ?? 0)) / 2 };
 }
 
