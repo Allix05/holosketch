@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 
-import { isPinching, isPinkyUp, penPoint, palmCenter, handLength, wristTwistAngle, Debouncer } from "./hand.js";
+import { isPinching, isPinkyUp, isThumbUp, penPoint, palmRestPoint, handLength, wristTwistAngle, Debouncer } from "./hand.js";
 import { preparePathForExtrusion } from "./path.js";
 
 const COLORS = ["#4df3ff", "#ff8a3d", "#4dffa0", "#ff4dc4", "#ffffff"];
@@ -150,8 +150,8 @@ let mode = "draw"; // "draw" | "holo"
 let strokePoints = [];
 let lastDrawPx = null;
 const pinchDebouncer = new Debouncer(3, false);
-const pinkyDebouncer = new Debouncer(4, false);
-let pinkyWasUp = false;
+const shakaDebouncer = new Debouncer(4, false);
+let shakaWasUp = false;
 let materializeStart = null;
 let materializeOriginPx = null;
 let materializeColor = currentColor;
@@ -298,16 +298,16 @@ function loop() {
       } else {
         lastDrawPx = null;
         setStatus(
-          strokePoints.length >= MIN_STROKE_POINTS ? "Raise your pinky to make it 3D" : "Pinch thumb + index to sketch",
+          strokePoints.length >= MIN_STROKE_POINTS ? "Raise thumb + pinky (🤙) to make it 3D" : "Pinch thumb + index to sketch",
           "ready"
         );
       }
 
-      const pinkyUp = pinkyDebouncer.update(isPinkyUp(landmarks));
-      if (pinkyUp && !pinkyWasUp && strokePoints.length >= MIN_STROKE_POINTS) {
+      const shakaUp = shakaDebouncer.update(isThumbUp(landmarks) && isPinkyUp(landmarks));
+      if (shakaUp && !shakaWasUp && strokePoints.length >= MIN_STROKE_POINTS) {
         extrude(landmarks);
       }
-      pinkyWasUp = pinkyUp;
+      shakaWasUp = shakaUp;
     } else if (mode === "holo" && holoGroup) {
       // The hologram continuously rests in your open hand: position, spin,
       // and apparent size all track the hand live, every frame -- no
@@ -315,8 +315,8 @@ function loop() {
       // the wrist spins it around the vertical axis (a real 3D turn that
       // reveals its extruded depth), while its position and size follow
       // the palm's screen position and distance from the camera.
-      const palmC = palmCenter(landmarks);
-      const world = screenToWorld(palmC.x, palmC.y, DEPTH_BASE);
+      const restPoint = palmRestPoint(landmarks);
+      const world = screenToWorld(restPoint.x, restPoint.y, DEPTH_BASE);
       holoGroup.position.set(world.x, world.y, world.z);
       holoGroup.rotation.y = -wristTwistAngle(landmarks);
       const rawScale = handLength(landmarks) / referenceHandLength;
@@ -335,7 +335,7 @@ function loop() {
     drawCursor(px, py, pinching);
   } else {
     lastDrawPx = null;
-    pinkyWasUp = false;
+    shakaWasUp = false;
     setStatus(mode === "holo" ? "Show your hand to see the hologram" : "Show your hand to the camera", "ready");
   }
 
@@ -347,7 +347,7 @@ clearBtn.addEventListener("click", () => {
   clearDrawCanvas();
   strokePoints = [];
   lastDrawPx = null;
-  pinkyWasUp = false;
+  shakaWasUp = false;
   referenceHandLength = null;
   materializeStart = null;
   if (holoGroup) {

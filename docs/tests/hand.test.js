@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pinchRatio, isPinching, penPoint, palmWidth, palmCenter, handRotation, isPinkyUp, wristTwistAngle, handLength, Debouncer, LM } from "../hand.js";
+import { pinchRatio, isPinching, penPoint, palmWidth, palmRestPoint, handRotation, isPinkyUp, isThumbUp, wristTwistAngle, handLength, Debouncer, LM } from "../hand.js";
 
 function baseLandmarks() {
   return Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5, z: 0 }));
@@ -106,13 +106,32 @@ test("handLength measures the wrist-to-middle-knuckle distance, unaffected by kn
   assert.ok(Math.abs(handLength(lm) - 0.4) < 1e-9);
 });
 
-test("palmCenter averages the wrist and the index/middle/pinky knuckles", () => {
+test("a curled thumb (tip near its own base) is not raised", () => {
   const lm = baseLandmarks();
-  lm[LM.WRIST] = { x: 0, y: 0, z: 0 };
-  lm[LM.INDEX_MCP] = { x: 1, y: 0, z: 0 };
-  lm[LM.MIDDLE_MCP] = { x: 1, y: 1, z: 0 };
-  lm[LM.PINKY_MCP] = { x: 0, y: 1, z: 0 };
-  const c = palmCenter(lm);
-  assert.ok(Math.abs(c.x - 0.5) < 1e-9);
-  assert.ok(Math.abs(c.y - 0.5) < 1e-9);
+  lm[LM.WRIST] = { x: 0, y: 0.3, z: 0 };
+  lm[LM.THUMB_MCP] = { x: 0, y: 0, z: 0 };
+  lm[LM.THUMB_TIP] = { x: 0.05, y: 0.02, z: 0 };
+  assert.equal(isThumbUp(lm), false);
+});
+
+test("a straightened thumb (tip pushed well past its base) is raised", () => {
+  const lm = baseLandmarks();
+  lm[LM.WRIST] = { x: 0, y: 0.3, z: 0 };
+  lm[LM.THUMB_MCP] = { x: 0.05, y: 0.28, z: 0 };
+  lm[LM.THUMB_TIP] = { x: 0.35, y: 0.1, z: 0 };
+  assert.equal(isThumbUp(lm), true);
+});
+
+test("palmRestPoint sits beyond the knuckle line, lifted along the hand's own axis", () => {
+  const lm = baseLandmarks();
+  lm[LM.WRIST] = { x: 0, y: 1, z: 0 };
+  lm[LM.INDEX_MCP] = { x: -0.1, y: 0, z: 0 };
+  lm[LM.MIDDLE_MCP] = { x: 0, y: 0, z: 0 };
+  lm[LM.PINKY_MCP] = { x: 0.1, y: 0, z: 0 };
+  const p = palmRestPoint(lm);
+  // Knuckle line center is (0, 0); the hand's axis runs from the wrist
+  // (0, 1) to the middle knuckle (0, 0), i.e. "up" is decreasing y, so
+  // the rest point should land further up than the knuckle line itself.
+  assert.ok(Math.abs(p.x - 0) < 1e-9);
+  assert.ok(p.y < 0, "rest point should be lifted past the knuckle line, away from the wrist");
 });
