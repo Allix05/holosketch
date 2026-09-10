@@ -326,7 +326,9 @@ function loop() {
         );
       }
 
-      const shakaUp = shakaDebouncer.update(isThumbUp(landmarks, 1.2) && isPinkyUp(landmarks, 1.3));
+      // Lower than the defaults (140/150deg) so the gesture fires without
+      // needing a perfectly ruler-straight thumb/pinky.
+      const shakaUp = shakaDebouncer.update(isThumbUp(landmarks, 120) && isPinkyUp(landmarks, 130));
       if (shakaUp && !shakaWasUp && strokePoints.length >= MIN_STROKE_POINTS) {
         extrude(landmarks);
       }

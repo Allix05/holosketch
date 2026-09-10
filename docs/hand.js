@@ -20,9 +20,25 @@ function dist2D(a, b) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-function dist3D(a, b) {
-  const dx = a.x - b.x, dy = a.y - b.y, dz = (a.z ?? 0) - (b.z ?? 0);
-  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+// The angle (radians) at `joint`, between the ray toward `before` and the
+// ray toward `after` -- e.g. angleAtJoint(wrist, mcp, tip) is the bend at
+// the knuckle. A straight line (before -> joint -> after keeps going the
+// same direction) gives an angle near PI; a sharp fold gives an angle
+// near 0. Deliberately 2D (x/y only): this is what makes it robust to
+// the hand's rotation *in the image plane* -- rotating the whole hand
+// around the camera axis doesn't change the angle at all, so a bent
+// knuckle reads as bent and a straight one reads as straight no matter
+// which way the hand is turned toward the camera. MediaPipe's z estimate
+// is comparatively noisy, so leaving it out of this check also avoids
+// dragging in extra jitter.
+function angleAtJoint(before, joint, after) {
+  const v1 = { x: before.x - joint.x, y: before.y - joint.y };
+  const v2 = { x: after.x - joint.x, y: after.y - joint.y };
+  const mag1 = Math.hypot(v1.x, v1.y);
+  const mag2 = Math.hypot(v2.x, v2.y);
+  if (mag1 === 0 || mag2 === 0) return Math.PI;
+  const cos = Math.max(-1, Math.min(1, (v1.x * v2.x + v1.y * v2.y) / (mag1 * mag2)));
+  return Math.acos(cos);
 }
 
 // Distance between thumb and index fingertips, normalized by palm width
@@ -90,29 +106,28 @@ export function handLength(landmarks) {
   return dist2D(landmarks[LM.WRIST], landmarks[LM.MIDDLE_MCP]);
 }
 
-// How extended a finger is: ratio of (wrist -> tip) to (wrist -> its own
-// MCP) distance, in full 3D (including depth). A curled finger keeps its
-// tip close to the wrist (ratio near/under 1); a straightened finger
-// pushes the tip much farther out. Using 3D distance -- not just the
-// flattened x/y image plane -- matters a lot here: when the palm faces
-// the camera dead-on, extending the thumb or pinky moves the tip mostly
-// toward/away from the camera (depth) rather than sideways in the image,
-// so a 2D-only distance barely changes and misses the gesture entirely.
-function fingerExtensionRatio(landmarks, tipIdx, mcpIdx) {
-  const wrist = landmarks[LM.WRIST];
-  const mcpDist = dist3D(wrist, landmarks[mcpIdx]);
-  if (mcpDist === 0) return 0;
-  return dist3D(wrist, landmarks[tipIdx]) / mcpDist;
+// A finger is "extended" when it continues in roughly a straight line
+// from the wrist through its own knuckle to its tip -- i.e. the angle at
+// the knuckle is close to a straight line (near PI radians / 180deg).
+// Curling the finger folds that angle down sharply regardless of the
+// hand's rotation in the image, which is what makes this robust across
+// orientations (including palm-to-camera) in a way a raw wrist-to-tip
+// distance isn't: a distance-ratio check depends on the hand's absolute
+// size/position doing the "right" thing in whatever direction it happens
+// to be facing, where an angle only cares about the knuckle's own shape.
+function isFingerExtended(landmarks, mcpIdx, tipIdx, minAngleDeg) {
+  const angleDeg = (angleAtJoint(landmarks[LM.WRIST], landmarks[mcpIdx], landmarks[tipIdx]) * 180) / Math.PI;
+  return angleDeg >= minAngleDeg;
 }
 
 // Detects the "raise your pinky" gesture: just the pinky extended.
-export function isPinkyUp(landmarks, threshold = 1.5) {
-  return fingerExtensionRatio(landmarks, LM.PINKY_TIP, LM.PINKY_MCP) > threshold;
+export function isPinkyUp(landmarks, minAngleDeg = 150) {
+  return isFingerExtended(landmarks, LM.PINKY_MCP, LM.PINKY_TIP, minAngleDeg);
 }
 
 // Detects an extended thumb (out to the side, away from the palm).
-export function isThumbUp(landmarks, threshold = 1.4) {
-  return fingerExtensionRatio(landmarks, LM.THUMB_TIP, LM.THUMB_MCP) > threshold;
+export function isThumbUp(landmarks, minAngleDeg = 140) {
+  return isFingerExtended(landmarks, LM.THUMB_MCP, LM.THUMB_TIP, minAngleDeg);
 }
 
 // Debounces a raw per-frame boolean (e.g. pinch state) so jitter near the

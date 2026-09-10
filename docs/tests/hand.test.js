@@ -93,14 +93,15 @@ test("a straightened pinky (tip far past the MCP) is raised", () => {
   assert.equal(isPinkyUp(lm), true);
 });
 
-test("isPinkyUp also detects extension that happens mostly in depth (palm facing the camera)", () => {
+test("isPinkyUp is invariant to the hand's rotation in the image (only the knuckle bend matters)", () => {
+  // The same straight-pinky shape as above, rotated 90 degrees about the
+  // wrist. A true rotation preserves the angle at the knuckle, so this
+  // should still read as raised no matter which way the hand is turned
+  // toward the camera -- including palm-to-camera orientations.
   const lm = baseLandmarks();
   lm[LM.WRIST] = { x: 0, y: 0, z: 0 };
-  lm[LM.PINKY_MCP] = { x: 0, y: 0.3, z: 0 };
-  // Same x/y as the MCP -- a purely 2D check would see this as curled --
-  // but pushed far toward the camera in z, which is what pinky extension
-  // looks like from the camera's point of view when the palm faces it.
-  lm[LM.PINKY_TIP] = { x: 0, y: 0.3, z: -0.5 };
+  lm[LM.PINKY_MCP] = { x: -0.3, y: 0, z: 0 };
+  lm[LM.PINKY_TIP] = { x: -0.9, y: 0, z: 0 };
   assert.equal(isPinkyUp(lm), true);
 });
 
@@ -143,13 +144,14 @@ test("a straightened thumb (tip pushed well past its base) is raised", () => {
   assert.equal(isThumbUp(lm), true);
 });
 
-test("isThumbUp also detects extension that happens mostly in depth (palm facing the camera)", () => {
+test("isThumbUp is invariant to the hand's rotation in the image (only the knuckle bend matters)", () => {
+  // The same straight-thumb shape as above, rotated 90 degrees about the
+  // origin ((x, y) -> (-y, x)). A true rotation preserves the angle at
+  // the knuckle, so this should still read as raised no matter which way
+  // the hand is turned toward the camera -- including palm-to-camera.
   const lm = baseLandmarks();
-  lm[LM.WRIST] = { x: 0, y: 0.3, z: 0 };
-  lm[LM.THUMB_MCP] = { x: 0, y: 0.28, z: 0 };
-  // Same x/y as the MCP -- a purely 2D check would see this as curled --
-  // but pushed far toward the camera in z, which is what thumb extension
-  // looks like from the camera's point of view when the palm faces it.
-  lm[LM.THUMB_TIP] = { x: 0, y: 0.28, z: -0.4 };
+  lm[LM.WRIST] = { x: -0.3, y: 0, z: 0 };
+  lm[LM.THUMB_MCP] = { x: -0.28, y: 0.05, z: 0 };
+  lm[LM.THUMB_TIP] = { x: -0.1, y: 0.35, z: 0 };
   assert.equal(isThumbUp(lm), true);
 });
